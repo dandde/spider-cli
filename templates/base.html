@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            padding: 4rem;
+            max-width: 60rem;
+            margin: auto;
+            line-height: 1.6;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            letter-spacing: -0.05em;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px dotted #ccc;
+            padding-bottom: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            font-family: inherit;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.5rem 1.5rem;
+            background-color: #e0e0e0;
+            border: 1px solid #999;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background-color: #d0d0d0;
+        }
+
+        .site-block {
+            margin-top: 2rem;
+        }
+
+        .site-header {
+            display: inline-block;
+            border: 1px solid #000;
+            border-bottom: none;
+            padding: 0.2rem 1rem;
+            font-size: 0.9rem;
+            color: #4a7a8c;
+            font-style: italic;
+        }
+
+        .results-box {
+            border-top: 1px solid #000;
+            padding-top: 0.5rem;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.9rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .status {
+            font-weight: bold;
+            width: 3rem;
+            flex-shrink: 0;
+        }
+
+        .status-REQ {
+            color: #f1c40f;
+        }
+
+        .status-DONE {
+            color: #2ecc71;
+        }
+
+        .status-END {
+            color: #06873c;
+        }
+
+        .status-PARS {
+            color: #f39c12;
+        }
+
+        .status-ERR {
+            color: #e74c3c;
+        }
+
+        .url {
+            color: #333;
+            word-break: break-all;
+        }
+    </style>
+    <title>{% block title %}Flawless Crawler{% endblock %}</title>
+</head>
+
+<body>
+    <header>
+        <h1>Flawless Crawler</h1>
+    </header>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+
+</html>

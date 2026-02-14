@@ -1,0 +1,19 @@
+{% for site in sites %}
+<div class="site-block" id="site-{{ site.id }}">
+    <div class="site-header">{{ site.url }}</div>
+    <div class="results-box">
+        {% for entry in site.entries %}
+        <div class="log-entry">
+            <span class="status status-{{ entry.status }}">{{ entry.status }}</span>
+            <span class="url">{{ entry.url }}</span>
+        </div>
+        {% endfor %}
+        {% if site.finished %}
+        <div class="log-entry" style="border-top: 1px dotted #ccc; margin-top: 0.5rem; padding-top: 0.5rem;">
+            <span class="status status-END">FINISH</span>
+            <span class="url" style="font-weight: bold;">Crawling task completed for {{ site.url }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}

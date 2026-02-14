@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="controls">
+    <form hx-post="/control/start" hx-target="#results-container" hx-swap="afterbegin"
+        style="display: flex; width: 100%; gap: 0.5rem;">
+        <input name="url" type="text" placeholder="https://news.ycombinator.com" required>
+        <button type="submit">START</button>
+    </form>
+</div>
+
+<div id="results-container">
+    <!-- Sites will be prepended here -->
+</div>
+
+<div hx-get="/stats" hx-trigger="every 1s" hx-target="#results-container" hx-swap="innerHTML"></div>
+{% endblock %}
