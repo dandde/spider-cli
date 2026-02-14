@@ -1,0 +1,24 @@
+{
+    "name": "quotes-sqlite",
+    "start_urls": [
+        "https://quotes.toscrape.com"
+    ],
+    "root_selector": "css:.quote",
+    "extraction_rules": {
+        "text": {
+            "selector": "css:.text",
+            "extract": "text"
+        },
+        "author": {
+            "selector": "css:.author",
+            "extract": "text"
+        }
+    },
+    "concurrency": 2,
+    "delay_ms": 500,
+    "output": {
+        "type": "sqlite",
+        "path": "../assets/outputs/quotes.db",
+        "table": "quotes"
+    }
+}

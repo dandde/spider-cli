@@ -14,6 +14,8 @@ pub struct Crawler {
     crawl_id: i64,
 }
 
+use tokio::sync::mpsc::UnboundedSender;
+
 impl Crawler {
     pub fn new(state_manager: Arc<StateManager>, crawl_id: i64, proxies: Vec<String>) -> Self {
         let proxy_manager = if proxies.is_empty() {
@@ -38,6 +40,7 @@ impl Crawler {
         respect_robots: bool,
         delay: Option<u64>,
         _concurrency: usize,
+        status_tx: Option<UnboundedSender<String>>,
     ) -> Result<()> {
         let mut website: Website = Website::new(start_url);
         
@@ -86,25 +89,27 @@ impl Crawler {
             
             // 1. Mark as processing in DB (Simplified: we track results and links)
             
-            // 2. Extract and Save Data
-            let mut cs = ChadSelect::new();
-            cs.add_html(html);
+            let extracted_data = {
+                let mut cs = ChadSelect::new();
+                cs.add_html(html);
 
-            let mut extracted_data = serde_json::Map::new();
-            for (name, selector) in &selectors {
-                let val = cs.select(0, selector);
-                if !val.is_empty() {
-                    extracted_data.insert(name.clone(), serde_json::json!(val));
+                let mut data = serde_json::Map::new();
+                for (name, selector) in &selectors {
+                    let val = cs.select(0, selector);
+                    if !val.is_empty() {
+                        data.insert(name.clone(), serde_json::json!(val));
+                    }
                 }
-            }
+                data
+            };
+
             self.state_manager.save_result(self.crawl_id, &url, &serde_json::Value::Object(extracted_data)).await?;
             self.cache_manager.cache(url.clone());
 
-            // 3. Persistent Link Discovery
-            // In spider 2.0+, Page doesn't have get_links(), but we can get them from the response if needed.
-            // However, spider manages internal links. For durability, we'd want to sync them.
-            // For now, we'll focus on results.
-            
+            if let Some(tx) = &status_tx {
+                let _ = tx.send(url.clone());
+            }
+
             tracing::info!("Processed and persisted: {}", url);
         }
 

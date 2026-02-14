@@ -1,0 +1,11 @@
+extends = "base.toml"
+name = "quotes-derived"
+root_selector = "css:.quote"
+
+[extraction_rules.author]
+selector = "css:.author"
+extract = "text"
+
+[output]
+type = "csv"
+path = "../assets/outputs/quotes.csv"

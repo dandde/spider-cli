@@ -1,0 +1,16 @@
+name: quotes-yaml
+start_urls:
+  - https://quotes.toscrape.com
+root_selector: "css:.quote"
+extraction_rules:
+  text:
+    selector: "css:.text"
+    extract: text
+  author:
+    selector: "css:.author"
+    extract: text
+concurrency: 2
+delay_ms: 1000
+output:
+  type: json
+  path: ../assets/outputs/quotes_output.json

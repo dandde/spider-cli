@@ -1,0 +1,8 @@
+name = "quotes-base"
+start_urls = ["https://quotes.toscrape.com"]
+concurrency = 4
+delay_ms = 200
+
+[extraction_rules.text]
+selector = "css:.text"
+extract = "text"

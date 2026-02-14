@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use axum::{
     routing::{get, post},
     Router,
@@ -9,7 +10,6 @@ use std::sync::{Arc, RwLock};
 use crate::state::StateManager;
 use anyhow::Result;
 use serde::Deserialize;
-use spider::website::Website;
 
 pub struct DashboardServer {
     state_manager: Arc<StateManager>,
@@ -46,7 +46,8 @@ struct StatsTemplate {
 
 #[derive(Deserialize)]
 struct StartParams {
-    url: String,
+    url: Option<String>,
+    config: Option<String>,
 }
 
 impl DashboardServer {
@@ -95,7 +96,35 @@ async fn start_crawl(
     State(state): State<Arc<AppState>>, 
     Form(params): Form<StartParams>
 ) -> impl IntoResponse {
-    let url = params.url.clone();
+    let config_res = if let Some(config_path) = params.config.as_ref().filter(|s| !s.is_empty()) {
+        crate::config::ConfigLoader::load(config_path)
+    } else {
+        Ok(crate::config::SpiderConfig {
+            name: "UI-Default".to_string(),
+            start_urls: params.url.as_ref().map(|u| vec![u.clone()]).unwrap_or_default(),
+            selectors: HashMap::new(),
+            concurrency: 1,
+            delay_ms: 0,
+            respect_robots: false,
+            extends: None,
+        })
+    };
+
+    let mut final_config = match config_res {
+        Ok(c) => c,
+        Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Config error: {}", e)).into_response(),
+    };
+
+    // Override with URL if provided explicitly
+    if let Some(u) = params.url.as_ref().filter(|s| !s.is_empty()) {
+        final_config.start_urls = vec![u.clone()];
+    }
+
+    if final_config.start_urls.is_empty() {
+        return (axum::http::StatusCode::BAD_REQUEST, "No start URL provided").into_response();
+    }
+
+    let url = final_config.start_urls[0].clone();
     
     // Create record in DB
     let crawl_id = state.state_manager.create_crawl(&format!("UI Crawl: {}", url)).await.unwrap_or(0);
@@ -115,34 +144,44 @@ async fn start_crawl(
     let app_state = state.clone();
     let state_manager = state.state_manager.clone();
     tokio::spawn(async move {
-        let mut website = Website::new(&url);
-        let mut rx = website.subscribe(16).unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let crawler = crate::crawler::Crawler::new(state_manager.clone(), crawl_id, vec![]);
         
-        // Use Crawler's CacheManager and logic if needed, but here we simplify for the UI display
+        let selectors: HashMap<String, String> = if final_config.selectors.is_empty() {
+            let mut s = HashMap::new();
+            s.insert("title".to_string(), "title".to_string());
+            s
+        } else {
+            final_config.selectors.into_iter().map(|(k, v)| (k, v.to_query_string())).collect()
+        };
+
+        let respect_robots = final_config.respect_robots;
+        let delay = Some(final_config.delay_ms);
+        let concurrency = final_config.concurrency;
+
         tokio::spawn(async move {
-            website.crawl().await;
+            if let Err(e) = crawler.run(&url, selectors, true, respect_robots, delay, concurrency, Some(tx)).await {
+                tracing::error!("Crawler background error: {}", e);
+            }
         });
 
-        while let Ok(res) = rx.recv().await {
-            let page_url = res.get_url().to_string();
+        // Listen to Crawler's status updates for UI logs
+        while let Some(page_url) = rx.recv().await {
             {
                 let mut sites = app_state.sites.write().unwrap();
                 if let Some(site) = sites.iter_mut().find(|s| s.id == crawl_id) {
-                    // Limit logs to keep it clean
                     if site.entries.len() > 10 {
                         site.entries.remove(0);
                     }
                     site.entries.push(LogEntry {
                         status: "DONE".to_string(),
-                        url: page_url.clone(),
+                        url: page_url,
                     });
                 }
             }
-            // Also persist to DB via StateManager
-            let _ = state_manager.save_result(crawl_id, &page_url, &serde_json::json!({"status": "DONE"})).await;
         }
 
-        // Mark as finished after the channel closes
+        // Mark as finished after the Crawler finishes (rx closes)
         {
             let mut sites = app_state.sites.write().unwrap();
             if let Some(site) = sites.iter_mut().find(|s| s.id == crawl_id) {
@@ -151,7 +190,7 @@ async fn start_crawl(
         }
     });
 
-    "" // HTMX will handle refresh
+    "Crawl started".into_response()
 }
 
 async fn stop_crawl() -> impl IntoResponse {

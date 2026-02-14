@@ -2,10 +2,13 @@
 
 {% block content %}
 <div class="controls">
-    <form hx-post="/control/start" hx-target="#results-container" hx-swap="afterbegin"
-        style="display: flex; width: 100%; gap: 0.5rem;">
-        <input name="url" type="text" placeholder="https://news.ycombinator.com" required>
-        <button type="submit">START</button>
+    <form hx-post="/control/start" hx-swap="none" class="crawl-form">
+        <div class="input-group">
+            <input type="text" name="url" placeholder="https://news.ycombinator.com" class="flawless-input">
+            <input type="text" name="config" placeholder="Path to config (optional)" class="flawless-input"
+                style="flex: 0.5; margin-left: 0.5rem;">
+            <button type="submit" class="start-btn">START</button>
+        </div>
     </form>
 </div>
 

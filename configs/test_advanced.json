@@ -1,0 +1,31 @@
+{
+    "name": "test-advanced",
+    "start_urls": [
+        "https://quotes.toscrape.com/"
+    ],
+    "root_selector": {
+        "kind": "Class",
+        "spec": "quote"
+    },
+    "extraction_rules": {
+        "text": {
+            "selector": {
+                "kind": "And",
+                "spec": [
+                    {
+                        "kind": "Tag",
+                        "spec": "span"
+                    },
+                    {
+                        "kind": "Class",
+                        "spec": "text"
+                    }
+                ]
+            },
+            "extract": "text"
+        }
+    },
+    "output": {
+        "type": "console"
+    }
+}
