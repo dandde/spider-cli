@@ -21,6 +21,11 @@ impl CacheManager {
         let mut cache = self.visited_results.write().unwrap();
         cache.insert(url);
     }
+
+    pub fn extend(&self, urls: Vec<String>) {
+        let mut cache = self.visited_results.write().unwrap();
+        cache.extend(urls);
+    }
 }
 
 #[cfg(test)]

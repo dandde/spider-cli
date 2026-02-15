@@ -28,7 +28,7 @@ impl SelectorConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct SpiderConfig {
     #[serde(default)]
     #[validate(length(min = 1))]
@@ -49,6 +49,15 @@ pub struct SpiderConfig {
 
     #[serde(default)]
     pub respect_robots: bool,
+
+    #[serde(default)]
+    pub blacklist: Vec<String>,
+
+    #[serde(default)]
+    pub whitelist: Vec<String>,
+
+    #[serde(default)]
+    pub max_depth: Option<usize>,
 
     /// Optional path to a parent configuration file to inherit from
     #[serde(default)]

@@ -1,0 +1,13 @@
+{
+    "name": "pagination-verified",
+    "start_urls": [
+        "https://quotes.toscrape.com"
+    ],
+    "selectors": {
+        "text": "css:.text"
+    },
+    "max_depth": 2,
+    "concurrency": 1,
+    "delay_ms": 1000,
+    "respect_robots": false
+}

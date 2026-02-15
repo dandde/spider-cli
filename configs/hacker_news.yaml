@@ -1,0 +1,12 @@
+name: hacker-news
+start_urls:
+  - https://news.ycombinator.com
+selectors:
+  title: "span.titleline > a"
+  score: "span.score"
+  user: "a.hnuser"
+  age: "span.age"
+  comments: ".subtext a:last-child"
+concurrency: 2
+delay_ms: 1000
+respect_robots: true

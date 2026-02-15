@@ -86,6 +86,16 @@ impl ConfigLoader {
             parent.respect_robots = child.respect_robots;
         }
 
+        if !child.blacklist.is_empty() {
+            parent.blacklist = child.blacklist;
+        }
+        if !child.whitelist.is_empty() {
+            parent.whitelist = child.whitelist;
+        }
+        if child.max_depth.is_some() {
+            parent.max_depth = child.max_depth;
+        }
+
         for (key, val) in child.selectors {
             parent.selectors.insert(key, val);
         }

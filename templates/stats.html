@@ -13,6 +13,13 @@
             <span class="status status-END">FINISH</span>
             <span class="url" style="font-weight: bold;">Crawling task completed for {{ site.url }}</span>
         </div>
+        {% else %}
+        <div class="log-entry" style="margin-top: 1rem;">
+            <form hx-post="/control/stop" hx-target="this" hx-swap="outerHTML">
+                <input type="hidden" name="id" value="{{ site.id }}">
+                <button type="submit" class="btn-stop">STOP</button>
+            </form>
+        </div>
         {% endif %}
     </div>
 </div>

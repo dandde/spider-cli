@@ -1,17 +1,18 @@
+mod config;
+mod crawler;
+mod features;
 mod models;
 mod state;
-mod crawler;
 mod ui;
-mod features;
-mod config;
+mod url_parser;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{EnvFilter, fmt};
 
-use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(name = "spider-cli")]
@@ -69,7 +70,14 @@ async fn main() -> Result<()> {
     let state_manager = Arc::new(state::StateManager::new("crawl_state.db").await?);
 
     match cli.command {
-        Commands::Crawl { url, config, respect_robots, delay, concurrency, dashboard } => {
+        Commands::Crawl {
+            url,
+            config,
+            respect_robots,
+            delay,
+            concurrency,
+            dashboard,
+        } => {
             let mut final_config = if let Some(config_path) = config {
                 config::ConfigLoader::load(config_path)?
             } else {
@@ -80,6 +88,9 @@ async fn main() -> Result<()> {
                     concurrency,
                     delay_ms: delay.unwrap_or(0),
                     respect_robots,
+                    blacklist: vec![],
+                    whitelist: vec![],
+                    max_depth: None,
                     extends: None,
                 }
             };
@@ -99,7 +110,9 @@ async fn main() -> Result<()> {
             }
 
             if final_config.start_urls.is_empty() {
-                anyhow::bail!("No start URL provided. Please provide a URL or a config file with start_urls.");
+                anyhow::bail!(
+                    "No start URL provided. Please provide a URL or a config file with start_urls."
+                );
             }
 
             let first_url = final_config.start_urls[0].clone();
@@ -109,7 +122,9 @@ async fn main() -> Result<()> {
                 tracing::info!("Found active crawl, resuming ID: {}", id);
                 id
             } else {
-                let id = state_manager.create_crawl(&format!("Crawl: {}", first_url)).await?;
+                let id = state_manager
+                    .create_crawl(&format!("Crawl: {}", first_url))
+                    .await?;
                 tracing::info!("Created new crawl, ID: {}", id);
                 id
             };
@@ -125,17 +140,33 @@ async fn main() -> Result<()> {
             }
 
             let crawler = crawler::Crawler::new(state_manager.clone(), crawl_id, vec![]);
-            
+
             let selectors = if final_config.selectors.is_empty() {
                 let mut s = HashMap::new();
                 s.insert("title".to_string(), "title".to_string());
                 s
             } else {
-                final_config.selectors.into_iter().map(|(k, v)| (k, v.to_query_string())).collect()
+                final_config
+                    .selectors
+                    .into_iter()
+                    .map(|(k, v)| (k, v.to_query_string()))
+                    .collect()
             };
 
             tokio::select! {
-                res = crawler.run(&first_url, selectors, true, final_config.respect_robots, Some(final_config.delay_ms), final_config.concurrency, None) => {
+                res = crawler.run(
+                    &first_url,
+                    selectors,
+                    true,
+                    final_config.respect_robots,
+                    Some(final_config.delay_ms),
+                    final_config.concurrency,
+                    final_config.blacklist,
+                    final_config.whitelist,
+                    final_config.max_depth,
+                    None,
+                    tokio_util::sync::CancellationToken::new()
+                ) => {
                     if let Err(e) = res {
                         tracing::error!("Crawler error: {}", e);
                     }

@@ -1,0 +1,13 @@
+name = "hacker-news"
+start_urls = ["https://news.ycombinator.com"]
+
+concurrency = 2
+delay_ms = 1000
+respect_robots = true
+
+[selectors]
+title = "css:span.titleline > a"
+score = "css:span.score"
+user = "css:a.hnuser"
+age = "css:span.age"
+comments = "css:.subtext a:last-child"

@@ -1,9 +1,9 @@
 use crate::features::cache::CacheManager;
 use crate::features::proxy::ProxyManager;
 use crate::state::StateManager;
+use anyhow::Result;
 use chadselect::ChadSelect;
 use spider::website::Website;
-use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -33,19 +33,40 @@ impl Crawler {
     }
 
     pub async fn run(
-        &self, 
-        start_url: &str, 
-        selectors: HashMap<String, String>, 
+        &self,
+        start_url: &str,
+        selectors: HashMap<String, String>,
         resume: bool,
         respect_robots: bool,
         delay: Option<u64>,
         _concurrency: usize,
+        blacklist: Vec<String>,
+        whitelist: Vec<String>,
+        max_depth: Option<usize>,
         status_tx: Option<UnboundedSender<String>>,
+        cancel_token: tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let mut website: Website = Website::new(start_url);
-        
+
+        tracing::info!(
+            "Crawler::run config - depth: {:?}, whitelist: {:?}, blacklist: {:?}",
+            max_depth,
+            whitelist,
+            blacklist
+        );
+
         // Configuration
         website.configuration.respect_robots_txt = respect_robots;
+        if let Some(depth) = max_depth {
+            website.configuration.depth = depth;
+        }
+
+        if !blacklist.is_empty() {
+            website.with_blacklist_url(Some(blacklist.iter().map(|s| s.clone().into()).collect()));
+        }
+        if !whitelist.is_empty() {
+            website.with_whitelist_url(Some(whitelist.iter().map(|s| s.clone().into()).collect()));
+        }
         // website.configuration.concurrency = concurrency; // Field not found in 2.0 Configuration
         if let Some(d) = delay {
             website.configuration.delay = d;
@@ -58,59 +79,99 @@ impl Crawler {
             }
         }
 
+        if let Ok(visited) = self.state_manager.get_visited_urls(self.crawl_id).await {
+            self.cache_manager.extend(visited);
+        }
+
         if resume {
             tracing::info!("Resuming crawl from database...");
-            let pending = self.state_manager.get_pending_frontier(self.crawl_id, 1000).await?;
-            for (_, _url, _) in pending {
-                // Seed spider's internal frontier if possible, or just scrape
-                // For now, we'll use start_urls if we can't deep-seed
+            if let Ok(pending) = self
+                .state_manager
+                .get_pending_frontier(self.crawl_id, 1000)
+                .await
+            {
+                // In a mature implementation, we'd seed these directly into the underlying crawler.
+                // For now, we rely on the database uniqueness to avoid duplicates.
+                tracing::info!("Found {} pending URLs to resume.", pending.len());
             }
         } else {
             // Initial seed
-            self.state_manager.add_to_frontier(self.crawl_id, vec![(start_url.to_string(), 0)]).await?;
+            self.state_manager
+                .add_to_frontier(self.crawl_id, vec![(start_url.to_string(), 0)])
+                .await?;
         }
 
         let mut rx2 = website.subscribe(8).unwrap();
-        
+
         // Start crawling
-        tokio::spawn(async move {
+        let website_handle = tokio::spawn(async move {
             website.crawl().await;
         });
 
         // Process discovered pages
-        while let Ok(res) = rx2.recv().await {
-            let url = res.get_url().to_string();
-            
-            if self.cache_manager.is_cached(&url) {
-                continue;
-            }
-            
-            let html = res.get_html();
-            
-            // 1. Mark as processing in DB (Simplified: we track results and links)
-            
-            let extracted_data = {
-                let mut cs = ChadSelect::new();
-                cs.add_html(html);
+        loop {
+            tokio::select! {
+                _ = cancel_token.cancelled() => {
+                    tracing::info!("Crawl cancelled by token.");
+                    website_handle.abort();
+                    break;
+                }
+                res = rx2.recv() => {
+                    match res {
+                        Ok(res) => {
+                            let raw_url = res.get_url().to_string();
+                            let url = crate::url_parser::normalize_url(&raw_url);
 
-                let mut data = serde_json::Map::new();
-                for (name, selector) in &selectors {
-                    let val = cs.select(0, selector);
-                    if !val.is_empty() {
-                        data.insert(name.clone(), serde_json::json!(val));
+                            if self.cache_manager.is_cached(&url) {
+                                continue;
+                            }
+
+                            let html = res.get_html();
+
+                            let extracted_data = {
+                                let mut cs = ChadSelect::new();
+                                cs.add_html(html);
+
+                                let mut data = serde_json::Map::new();
+                                for (name, selector) in &selectors {
+                                    let final_selector = if selector.starts_with("css:")
+                                        || selector.starts_with("xpath:")
+                                        || selector.starts_with("regex:")
+                                    {
+                                        selector.clone()
+                                    } else {
+                                        format!("css:{}", selector)
+                                    };
+
+                                    let val = cs.select(0, &final_selector);
+                                    // Note: chadselect warns if select(0, ...) is called on 0 results.
+                                    // In a production environment, we should use a safer API if available.
+                                    if !val.is_empty() {
+                                        data.insert(name.clone(), serde_json::json!(val));
+                                    }
+                                }
+                                data
+                            };
+
+                            self.state_manager
+                                .save_result(
+                                    self.crawl_id,
+                                    &url,
+                                    &serde_json::Value::Object(extracted_data),
+                                )
+                                .await?;
+                            self.cache_manager.cache(url.clone());
+
+                            if let Some(tx) = &status_tx {
+                                let _ = tx.send(url.clone());
+                            }
+
+                            tracing::info!("Processed and persisted: {}", url);
+                        }
+                        Err(_) => break, // Channel closed/end of crawl
                     }
                 }
-                data
-            };
-
-            self.state_manager.save_result(self.crawl_id, &url, &serde_json::Value::Object(extracted_data)).await?;
-            self.cache_manager.cache(url.clone());
-
-            if let Some(tx) = &status_tx {
-                let _ = tx.send(url.clone());
             }
-
-            tracing::info!("Processed and persisted: {}", url);
         }
 
         Ok(())

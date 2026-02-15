@@ -11,6 +11,7 @@ chadselect = "0.2"
 # Backend & Web
 axum = { version = "0.7", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 askama = "0.15.4"
 askama_axum = "0.4.0"
