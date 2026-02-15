@@ -169,7 +169,20 @@ async fn main() -> Result<()> {
                 ) => {
                     if let Err(e) = res {
                         tracing::error!("Crawler error: {}", e);
+                    } else {
+                        // Build and display hierarchical tree
+                        let urls = state_manager.get_results_urls(crawl_id).await?;
+                        let mut collection = url_parser::UrlCollection::new();
+                        for url_str in &urls {
+                            if let Ok(url_ref) = url_parser::UrlRef::from_str(url_str) {
+                                let _ = collection.add(url_ref);
+                            }
+                        }
+                        println!("\n📊 Crawl Hierarchy Results:");
+                        collection.display_trees();
+                        println!("\n{}", collection.stats());
                     }
+
                     if dashboard {
                         tracing::info!("Crawl finished. Dashboard remains active at http://localhost:3030. Press Ctrl+C to stop.");
                         tokio::signal::ctrl_c().await?;

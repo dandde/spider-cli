@@ -1,6 +1,18 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use url::Url;
+
+/// Node type for hierarchical structure
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NodeType {
+    /// Domain level (root or sub-root)
+    Domain,
+    /// Folder/Path segment
+    Folder,
+    /// Final leaf/File
+    File,
+}
 
 /// Zero-Copy URL Components Using Lifetimes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +105,11 @@ impl<'a> UrlRef<'a> {
         })
     }
 
+    /// Split path into segments, filtering out empty ones
+    pub fn path_segments(&self) -> Vec<&'a str> {
+        self.path.split('/').filter(|s| !s.is_empty()).collect()
+    }
+
     /// Parse domain into subdomain and domain (zero-copy)
     fn parse_domain(hostname: &'a str) -> (&'a str, &'a str) {
         let parts: Vec<&str> = hostname.split('.').collect();
@@ -177,6 +194,167 @@ pub fn normalize_url(url: &str) -> String {
     }
 }
 
+/// Hierarchical Tree Node Using Zero-Copy Design
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreeNode<'a> {
+    pub name: &'a str,
+    pub node_type: NodeType,
+    #[serde(borrow)]
+    pub children: HashMap<&'a str, Box<TreeNode<'a>>>,
+    #[serde(borrow)]
+    pub urls: Vec<UrlRef<'a>>,
+}
+
+impl<'a> TreeNode<'a> {
+    pub fn new(name: &'a str, node_type: NodeType) -> Self {
+        TreeNode {
+            name,
+            node_type,
+            children: HashMap::new(),
+            urls: Vec::new(),
+        }
+    }
+
+    /// Insert URL into tree (zero-copy structure)
+    pub fn insert(&mut self, url: UrlRef<'a>) {
+        let segments = url.path_segments();
+        let mut current = self;
+
+        for (i, segment) in segments.iter().enumerate() {
+            let node_type = if i == segments.len() - 1 {
+                NodeType::File
+            } else {
+                NodeType::Folder
+            };
+
+            current
+                .children
+                .entry(segment)
+                .or_insert_with(|| Box::new(TreeNode::new(segment, node_type)));
+
+            current = current.children.get_mut(segment).unwrap();
+        }
+
+        current.urls.push(url);
+    }
+
+    /// Display tree (zero-copy: uses references)
+    pub fn display(&self, prefix: &str, is_last: bool, is_root: bool) {
+        print!("{}", self.render_to_string(prefix, is_last, is_root));
+    }
+
+    /// Render tree to string (zero-copy: involves recursive prefix tracking)
+    pub fn render_to_string(&self, prefix: &str, is_last: bool, is_root: bool) -> String {
+        let mut output = String::new();
+
+        // Node marker and name
+        if !is_root {
+            let marker = if is_last { "└── " } else { "├── " };
+            output.push_str(&format!("{}{}", prefix, marker));
+        }
+
+        let icon = match self.node_type {
+            NodeType::Domain => "📦",
+            NodeType::Folder => "📁",
+            NodeType::File => "📄",
+        };
+
+        let url_count = if is_root {
+            "".to_string()
+        } else {
+            format!(" ({})", self.urls.len())
+        };
+
+        // Note: Using a space after the icon for better alignment
+        output.push_str(&format!("{} {}{}\n", icon, self.name, url_count));
+
+        // Prepare prefix for children
+        let new_prefix = if is_root {
+            "".to_string()
+        } else {
+            format!("{}{}", prefix, if is_last { "    " } else { "│   " })
+        };
+
+        let mut children_vec: Vec<_> = self.children.values().collect();
+        // Sort children by name for deterministic output
+        children_vec.sort_by(|a, b| a.name.cmp(b.name));
+
+        for (i, child) in children_vec.iter().enumerate() {
+            let last_child = i == children_vec.len() - 1;
+            output.push_str(&child.render_to_string(&new_prefix, last_child, false));
+        }
+
+        output
+    }
+}
+
+/// Collection of unique URLs and their hierarchies
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct UrlCollection<'a> {
+    #[serde(borrow)]
+    pub unique_urls: HashMap<String, UrlRef<'a>>,
+    #[serde(borrow)]
+    pub hierarchies: HashMap<&'a str, TreeNode<'a>>,
+}
+
+impl<'a> UrlCollection<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, url: UrlRef<'a>) -> Result<()> {
+        let normalized = url.normalize();
+        if !self.unique_urls.contains_key(&normalized) {
+            self.unique_urls.insert(normalized, url);
+
+            // Add to hierarchy using hostname as root
+            let host = url.hostname;
+            let root = self
+                .hierarchies
+                .entry(host)
+                .or_insert_with(|| TreeNode::new(host, NodeType::Domain));
+            root.insert(url);
+        }
+        Ok(())
+    }
+
+    pub fn unique_count(&self) -> usize {
+        self.unique_urls.len()
+    }
+
+    pub fn stats(&self) -> String {
+        let mut stats = format!("  Total Unique URLs:    {}\n", self.unique_count());
+        stats.push_str(&format!(
+            "  Total Domains:        {}\n",
+            self.hierarchies.len()
+        ));
+
+        let mut total_depth = 0;
+        for url in self.unique_urls.values() {
+            total_depth += url.depth;
+        }
+
+        if !self.unique_urls.is_empty() {
+            stats.push_str(&format!(
+                "  Average Depth:        {:.2}\n",
+                total_depth as f64 / self.unique_urls.len() as f64
+            ));
+        }
+
+        stats
+    }
+
+    pub fn display_trees(&self) {
+        let mut hierarchies_vec: Vec<_> = self.hierarchies.values().collect();
+        hierarchies_vec.sort_by(|a, b| a.name.cmp(b.name));
+
+        for (i, root) in hierarchies_vec.iter().enumerate() {
+            let last = i == hierarchies_vec.len() - 1;
+            root.display("", last, true);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +401,38 @@ mod tests {
         assert_eq!(u_root.depth, 0);
         assert_eq!(u_root.subdomain, "");
         assert_eq!(u_root.domain, "example.com");
+    }
+
+    #[test]
+    fn test_hierarchical_tree() {
+        let mut collection = UrlCollection::new();
+
+        let urls = vec![
+            "https://example.com/blog/posts/rust.html",
+            "https://example.com/blog/posts/python.html",
+            "https://example.com/about",
+            "https://api.example.com/v1/users",
+        ];
+
+        for url_str in &urls {
+            let url_ref = UrlRef::from_str(url_str).unwrap();
+            collection.add(url_ref).unwrap();
+        }
+
+        assert_eq!(collection.unique_count(), 4);
+        assert_eq!(collection.hierarchies.len(), 2);
+
+        println!("📊 Collection Stats:\n{}", collection.stats());
+        println!("🌳 Tree Structure:");
+        collection.display_trees();
+
+        /* println!(
+            "JSON representation:\n{}",
+            serde_json::to_string_pretty(&collection).unwrap()
+        ); */
+
+        let root = &collection.hierarchies["example.com"];
+        assert_eq!(root.name, "example.com");
+        assert_eq!(root.children.len(), 2);
     }
 }

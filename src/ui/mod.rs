@@ -3,13 +3,14 @@ use anyhow::Result;
 use askama::Template;
 use axum::{
     Router,
-    extract::{Form, State},
+    extract::{Form, Path, State},
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tower_http::services::ServeDir;
 
 pub struct DashboardServer {
     state_manager: Arc<StateManager>,
@@ -49,6 +50,13 @@ struct StatsTemplate {
 #[template(path = "help.html")]
 struct HelpTemplate {}
 
+#[derive(Template)]
+#[template(path = "hierarchy.html")]
+struct HierarchyTemplate {
+    crawl_id: i64,
+    stats: String,
+}
+
 #[derive(Deserialize)]
 struct StartParams {
     url: Option<String>,
@@ -76,8 +84,11 @@ impl DashboardServer {
             .route("/", get(index))
             .route("/help", get(help))
             .route("/stats", get(stats))
+            .route("/hierarchy/:id", get(hierarchy))
+            .route("/hierarchy/:id/json", get(hierarchy_json))
             .route("/control/start", post(start_crawl))
             .route("/control/stop", post(stop_crawl))
+            .nest_service("/assets", ServeDir::new("assets"))
             .with_state(state);
 
         let addr = format!("0.0.0.0:{}", port);
@@ -123,6 +134,66 @@ async fn help() -> impl IntoResponse {
     }
 }
 
+async fn hierarchy(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> impl IntoResponse {
+    match state.state_manager.get_results_urls(id).await {
+        Ok(urls) => {
+            let mut collection = crate::url_parser::UrlCollection::new();
+            for url_str in &urls {
+                if let Ok(url_ref) = crate::url_parser::UrlRef::from_str(url_str) {
+                    let _ = collection.add(url_ref);
+                }
+            }
+
+            // Redirect stdout to capture tree display or implement a string version
+            // For now, let's use a simple string-based tree builder or similar
+            // Actually, I can implement a method that returns the tree as a string in mod.rs
+
+            // Re-use display logic but into a String
+            // I'll add a helper to UrlCollection for this
+
+            let template = HierarchyTemplate {
+                crawl_id: id,
+                stats: collection.stats(),
+            };
+
+            match template.render() {
+                Ok(html) => axum::response::Html(html).into_response(),
+                Err(e) => (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Template error: {}", e),
+                )
+                    .into_response(),
+            }
+        }
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {}", e),
+        )
+            .into_response(),
+    }
+}
+
+async fn hierarchy_json(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match state.state_manager.get_results_urls(id).await {
+        Ok(urls) => {
+            let mut collection = crate::url_parser::UrlCollection::new();
+            for url_str in &urls {
+                if let Ok(url_ref) = crate::url_parser::UrlRef::from_str(url_str) {
+                    let _ = collection.add(url_ref);
+                }
+            }
+            axum::Json(collection).into_response()
+        }
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {}", e),
+        )
+            .into_response(),
+    }
+}
 async fn start_crawl(
     State(state): State<Arc<AppState>>,
     Form(params): Form<StartParams>,

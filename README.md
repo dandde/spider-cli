@@ -19,6 +19,39 @@ A powerful, high-performance web crawler and scraper CLI built on top of the `sp
 cargo build --release
 ```
 
+## 🤖 Automation Workflows
+
+We provide three primary automation scripts for the pipeline:
+
+### 1. `run_test_build.sh`
+Executes unit tests and starts a standard crawl.
+
+### 2. `verify_dashboard.sh`
+A comprehensive verification tool that checks syntax, tests logic, builds release, and performs a live connectivity check on the dashboard.
+
+### 3. `start_dashboard.sh`
+Launches the monitoring server independently. Automatically kills port 3030 if in use.
+
+### Usage:
+```bash
+# Full verification
+cd spider-cli && ./verify_dashboard.sh
+
+# Start the dashboard
+cd spider-cli && ./start_dashboard.sh
+```
+
+## 🏃 Manual Execution
+
+```bash
+# To crawl a specific site headlessly
+cargo run -- crawl https://example.com --delay 500
+
+# To start the Flawless Dashboard
+cargo run -- serve --port 3030
+```
+Then open [http://localhost:3030](http://localhost:3030) in your browser.
+
 ### Basic Usage
 
 **Ad-hoc Crawl:**
@@ -40,19 +73,59 @@ cargo build --release
 
 Spider CLI supports hierarchical configuration via JSON, YAML, or TOML.
 
-Example `spider.json`:
+## ⚙️ Configuration Examples
+
+Spider CLI supports hierarchical configuration. Below are examples of the same complex job in different formats.
+
+````carousel
 ```json
 {
-  "name": "my-crawl",
-  "start_urls": ["https://quotes.toscrape.com"],
+  "name": "hacker-news-complex",
+  "start_urls": ["https://news.ycombinator.com"],
   "selectors": {
-    "quote": "css:span.text",
-    "author": "css:small.author"
+    "headline": "css:.titleline > a",
+    "score": "css:.score",
+    "user": "css:.hnuser",
+    "link": {
+      "selector": "xpath://span[@class='titleline']/a",
+      "attr": "href"
+    }
   },
-  "max_depth": 3,
+  "concurrency": 5,
+  "max_depth": 2,
   "respect_robots": true
 }
 ```
+<!-- slide -->
+```yaml
+name: hacker-news-yaml
+start_urls:
+  - https://news.ycombinator.com
+selectors:
+  headline: css:.titleline > a
+  link:
+    selector: xpath://span[@class='titleline']/a
+    attr: href
+  score: css:.score
+concurrency: 5
+max_depth: 3
+```
+<!-- slide -->
+```toml
+name = "hacker-news-toml"
+concurrency = 5
+max_depth = 2
+start_urls = ["https://news.ycombinator.com"]
+
+[selectors]
+headline = "css:.titleline > a"
+score = "css:.score"
+
+[selectors.link]
+selector = "xpath://span[@class='titleline']/a"
+attr = "href"
+```
+````
 
 For a detailed guide on the configuration system, see [CONFIG_GUIDE.md](./CONFIG_GUIDE.md).
 

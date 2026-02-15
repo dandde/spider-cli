@@ -82,6 +82,11 @@ impl StateManager {
         Ok(urls)
     }
 
+    pub async fn get_results_urls(&self, crawl_id: i64) -> Result<Vec<String>> {
+        // Alias for get_visited_urls but specifically for results table discovery
+        self.get_visited_urls(crawl_id).await
+    }
+
     pub async fn add_to_frontier(&self, crawl_id: i64, urls: Vec<(String, usize)>) -> Result<()> {
         for (url, depth) in urls {
             sqlx::query(

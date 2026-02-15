@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+
+{% block title %}Site Hierarchy - Flawless Crawler{% endblock %}
+
+{% block content %}
+<!-- Prism.js for JSON Highlighting (Local Assets to avoid Security Error with Web Workers) -->
+<link rel="stylesheet" href="/assets/vendor/prism/prism.min.css">
+<script src="/assets/vendor/prism/prism.min.js"></script>
+<script src="/assets/vendor/prism/prism-json.min.js"></script>
+
+<div class="hierarchy-container"
+    style="max-width: 1400px; margin: 0 auto; padding: 1rem; font-family: 'Inter', system-ui, -apple-system, sans-serif; position: relative;">
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="spinner"></div>
+        <div style="margin-top: 1.5rem; color: #4a7a8c; font-weight: 600; font-size: 1.1rem; letter-spacing: 0.02em;"
+            id="loader-text">Switching Views...</div>
+        <div style="margin-top: 0.5rem; color: #888; font-size: 0.85rem;" id="loader-subtext">Processing data
+            visualization</div>
+    </div>
+
+    <!-- Header Controls -->
+    <div
+        style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem;">
+        <div>
+            <nav
+                style="font-size: 0.85rem; color: #666; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <a href="/stats" style="color: #4a7a8c; text-decoration: none;">Dashboard</a>
+                <span>/</span>
+                <span style="color: #999;">Session #{{ crawl_id }}</span>
+            </nav>
+            <h1 style="margin: 0; font-size: 1.75rem; color: #1a1a1a; font-weight: 700;">Site Architecture Explorer</h1>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <div
+                style="display: flex; background: #fff; border: 1px solid #dfe3e8; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <button onclick="expandAll()" class="ctrl-btn" title="Expand All">(+)</button>
+                <button onclick="collapseAll()" class="ctrl-btn" style="border-left: 1px solid #eee;"
+                    title="Collapse All">(-)</button>
+                <button onclick="fitToView()" class="ctrl-btn" style="border-left: 1px solid #eee;"
+                    title="Reset View">Reset</button>
+            </div>
+            <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
+            <button id="toggle-view-btn" onclick="toggleView()" class="btn btn-primary">Switch to JSON</button>
+        </div>
+    </div>
+
+    <!-- Stats Summary -->
+    <div class="card"
+        style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <h2
+            style="font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin-bottom: 1rem; margin-top: 0;">
+            Discovery Overview</h2>
+        <div id="stats-display"
+            style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #444; line-height: 1.5;">
+            {{ stats|linebreaksbr }}
+        </div>
+    </div>
+
+    <!-- Visual Explorer View -->
+    <div id="visual-view" class="card"
+        style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; min-height: 700px; position: relative; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div id="chart" style="width: 100%; height: auto; min-height: 700px;"></div>
+
+        <!-- Tooltip -->
+        <div id="tooltip"
+            style="position: absolute; pointer-events: none; background: #fff; border: 1px solid #4a7a8c; color: #333; padding: 12px 16px; border-radius: 6px; font-size: 13px; display: none; z-index: 1000; font-family: 'JetBrains Mono', monospace; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);">
+        </div>
+
+        <div style="position: absolute; bottom: 1.5rem; width: 100%; text-align: center; pointer-events: none;">
+            <span
+                style="background: rgba(255,255,255,0.95); padding: 8px 18px; border-radius: 20px; font-size: 0.8rem; color: #555; border: 1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-weight: 500;">
+                Click Circle: Expand/Collapse • Click File Node: Navigate to URL
+            </span>
+        </div>
+    </div>
+
+    <!-- JSON View -->
+    <div id="json-view"
+        style="display: none; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div
+            style="padding: 1rem 1.5rem; border-bottom: 1px solid #eee; background: #fcfcfc; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; color: #555; font-size: 0.9rem;">Structured Site Data (JSON)</span>
+            <button onclick="copyJson()" class="btn btn-secondary"
+                style="padding: 0.3rem 0.8rem; font-size: 0.75rem;">Copy to Clipboard</button>
+        </div>
+        <pre class="language-json"
+            style="margin: 0; padding: 2rem; border: none; border-radius: 0 0 8px 8px; max-height: 800px; overflow: auto; font-size: 0.9rem;"><code id="json-content"></code></pre>
+    </div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+    let currentView = 'visual';
+    let root, svg, gLink, gNode, collectionData, conciseTree;
+    let i = 0;
+    let duration = 600;
+    let isInitialLoad = true;
+
+    const tree = d3.tree().nodeSize([60, 280]);
+    const diagonal = d3.linkHorizontal().x(d => d.y).y(d => d.x);
+
+    async function init() {
+        showLoader("Fetching Hierarchy...", "Retrieving site structure from server");
+        try {
+            const response = await fetch('/hierarchy/{{ crawl_id }}/json');
+            collectionData = await response.json();
+
+            // Transform into Concise Tree (omitting bulky flat maps)
+            conciseTree = {
+                name: "Discovery Core",
+                nodeType: 'Root',
+                timestamp: new Date().toISOString(),
+                stats: {
+                    total_urls: Object.keys(collectionData.unique_urls).length,
+                    total_domains: Object.keys(collectionData.hierarchies).length
+                },
+                hierarchies: Object.entries(collectionData.hierarchies).map(([host, node]) => transformToConcise(node))
+            };
+
+            function transformToConcise(node) {
+                return {
+                    name: node.name,
+                    nodeType: node.node_type,
+                    urls: node.urls.map(u => ({ path: u.path, full_url: u.full_url })),
+                    children: Object.values(node.children).map(child => transformToConcise(child))
+                };
+            }
+
+            // Populate JSON content with Concise Tree
+            const jsonStr = JSON.stringify(conciseTree, null, 2);
+            const codeBox = document.getElementById('json-content');
+            codeBox.textContent = jsonStr;
+            codeBox.className = 'language-json'; // Required for Prism
+
+            const data = {
+                name: "Discovery Core",
+                nodeType: 'Domain',
+                urls: [],
+                children: Object.entries(collectionData.hierarchies).map(([host, node]) => transformNode(node))
+            };
+
+            function transformNode(node) {
+                return {
+                    name: node.name,
+                    nodeType: node.node_type,
+                    urlCount: node.urls.length,
+                    urls: node.urls,
+                    children: Object.values(node.children).map(child => transformNode(child))
+                };
+            }
+
+            root = d3.hierarchy(data);
+            root.x0 = 0;
+            root.y0 = 0;
+
+            if (root.children) {
+                root.children.forEach(d => { if (d.depth > 0) collapseRecursive(d); });
+            }
+
+            zoomBehavior = d3.zoom().on("zoom", (event) => {
+                svgG.attr("transform", event.transform);
+            });
+
+            svg = d3.select("#chart").append("svg")
+                .attr("width", "100%")
+                .attr("height", 800)
+                .style("cursor", "move")
+                .call(zoomBehavior);
+
+            svgG = svg.append("g");
+            gLink = svgG.append("g").attr("fill", "none").attr("stroke", "#eee").attr("stroke-width", 1.5);
+            gNode = svgG.append("g").attr("cursor", "pointer").attr("pointer-events", "all");
+
+            update(root);
+
+            // Auto-center on initial load
+            setTimeout(() => {
+                fitToView(false); // No transition for initial load
+                hideLoader();
+            }, 100);
+
+            isInitialLoad = false;
+
+        } catch (e) {
+            console.error(e);
+            hideLoader();
+        }
+    }
+
+    let zoomBehavior, svgG;
+
+    function fitToView(transition = true) {
+        if (!svgG || !svg) return;
+        const bounds = svgG.node().getBBox();
+        const parent = svg.node().parentElement;
+        const fullWidth = parent.clientWidth;
+        const fullHeight = 800;
+
+        const width = bounds.width;
+        const height = bounds.height;
+        const midX = bounds.x + width / 2;
+        const midY = bounds.y + height / 2;
+
+        if (width === 0 || height === 0) return;
+
+        const padding = 40;
+        let scale = Math.min(0.9, 0.9 / Math.max(width / (fullWidth - padding), height / (fullHeight - padding)));
+
+        // Prevent scaling down too far to keep it "Flawless" and readable
+        if (scale < 0.4) scale = 0.4;
+
+        const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+
+        const target = d3.zoomIdentity
+            .translate(translate[0], translate[1])
+            .scale(scale);
+
+        if (transition) {
+            svg.transition().duration(750).call(zoomBehavior.transform, target);
+        } else {
+            svg.call(zoomBehavior.transform, target);
+        }
+    }
+
+    function showLoader(text, subtext) {
+        document.getElementById('loader-text').innerText = text;
+        document.getElementById('loader-subtext').innerText = subtext || "Please wait...";
+        document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    function hideLoader() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    }
+
+    function collapseRecursive(d) {
+        if (d.children) {
+            d._children = d.children;
+            d._children.forEach(collapseRecursive);
+            d.children = null;
+        }
+    }
+
+    function expandRecursive(d) {
+        if (d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+        if (d.children) {
+            d.children.forEach(expandRecursive);
+        }
+    }
+
+    function expandAll() {
+        showLoader("Expanding All...", "Calculating layout for entire tree");
+        setTimeout(() => {
+            expandRecursive(root);
+            update(root);
+            fitToView(true);
+            hideLoader();
+        }, 50);
+    }
+
+    function collapseAll() {
+        showLoader("Collapsing All...", "Cleaning up hierarchy");
+        setTimeout(() => {
+            if (root.children) {
+                root.children.forEach(collapseRecursive);
+            }
+            update(root);
+            fitToView(true);
+            hideLoader();
+        }, 50);
+    }
+
+    function update(source) {
+        const nodes = root.descendants().reverse();
+        const links = root.links();
+
+        tree(root);
+
+        let left = root;
+        let right = root;
+        root.eachBefore(node => {
+            if (node.x < left.x) left = node;
+            if (node.x > right.x) right = node;
+        });
+
+        const height = Math.max(800, right.x - left.x + 200);
+        d3.select("svg").transition().duration(isInitialLoad ? 0 : duration).attr("height", height);
+
+        const node = gNode.selectAll("g")
+            .data(nodes, d => d.id || (d.id = ++i));
+
+        const nodeEnter = node.enter().append("g")
+            .attr("transform", d => `translate(${source.y0},${source.x0})`)
+            .attr("fill-opacity", 0)
+            .attr("stroke-opacity", 0)
+            .on("click", (event, d) => {
+                if (d.data.nodeType === 'File' && d.data.urls && d.data.urls.length > 0) {
+                    window.open(d.data.urls[0].full_url, '_blank');
+                    return;
+                }
+                if (d.children || d._children) {
+                    d.children = d.children ? null : d._children;
+                    update(d);
+                }
+            });
+
+        nodeEnter.append("circle")
+            .attr("r", 6)
+            .attr("fill", d => d._children ? "#4a7a8c" : "#fff")
+            .attr("stroke", d => d.data.nodeType === 'File' ? "#28a745" : "#4a7a8c")
+            .attr("stroke-width", 2)
+            .on("mouseover", showTooltip)
+            .on("mouseout", hideTooltip);
+
+        nodeEnter.append("text")
+            .attr("dy", "0.31em")
+            .attr("x", d => d._children || d.children ? -14 : 14)
+            .attr("text-anchor", d => d._children || d.children ? "end" : "start")
+            .text(d => d.data.name)
+            .style("font-size", "12px")
+            .style("font-family", "'Inter', sans-serif")
+            .style("font-weight", d => d.depth < 2 ? "600" : "400")
+            .attr("fill", d => d.data.nodeType === 'File' ? "#2d5a27" : "#1a1a1a")
+            .clone(true).lower()
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-width", 3)
+            .attr("stroke", "white");
+
+        const nodeUpdate = node.merge(nodeEnter).transition().duration(isInitialLoad ? 0 : duration)
+            .attr("transform", d => `translate(${d.y},${d.x})`)
+            .attr("fill-opacity", 1)
+            .attr("stroke-opacity", 1);
+
+        nodeUpdate.select("circle")
+            .attr("fill", d => d._children ? "#4a7a8c" : "#fff");
+
+        const nodeExit = node.exit().transition().duration(isInitialLoad ? 0 : duration).remove()
+            .attr("transform", d => `translate(${source.y},${source.x})`)
+            .attr("fill-opacity", 0)
+            .attr("stroke-opacity", 0);
+
+        const link = gLink.selectAll("path")
+            .data(links, d => d.target.id);
+
+        const linkEnter = link.enter().append("path")
+            .attr("stroke", "#eee")
+            .attr("d", d => {
+                const o = { x: source.x0, y: source.y0 };
+                return diagonal({ source: o, target: o });
+            });
+
+        link.merge(linkEnter).transition().duration(isInitialLoad ? 0 : duration)
+            .attr("d", diagonal);
+
+        link.exit().transition().duration(isInitialLoad ? 0 : duration).remove()
+            .attr("d", d => {
+                const o = { x: source.x, y: source.y };
+                return diagonal({ source: o, target: o });
+            });
+
+        nodes.forEach(d => {
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+    }
+
+    function showTooltip(event, d) {
+        if (d.depth === 0) return;
+        const tooltip = d3.select("#tooltip");
+        const chartBox = document.getElementById('visual-view').getBoundingClientRect();
+        const full_url = (d.data.urls && d.data.urls.length > 0) ? d.data.urls[0].full_url : 'N/A';
+
+        tooltip.style("display", "block")
+            .html(`
+                <div style="font-weight: 700; margin-bottom: 6px; color: #1a1a1a;">${d.data.name}</div>
+                <div style="color: #666; font-size: 11px; font-family: 'JetBrains Mono', monospace;">
+                    <span style="color: #999;">TYPE:</span> <span style="text-transform: uppercase; color: #4a7a8c;">${d.data.nodeType}</span><br>
+                    <span style="color: #999;">URL:</span> <span style="word-break: break-all;">${full_url}</span>
+                </div>
+            `)
+            .style("left", (event.clientX - chartBox.left + 20) + "px")
+            .style("top", (event.clientY - chartBox.top - 40) + "px");
+
+        d3.select(this).attr("r", 8).transition().duration(200).attr("stroke-width", 4);
+    }
+
+    function hideTooltip() {
+        d3.select("#tooltip").style("display", "none");
+        d3.select(this).attr("r", 6).transition().duration(200).attr("stroke-width", 2);
+    }
+
+    function toggleView() {
+        const visual = document.getElementById('visual-view');
+        const json = document.getElementById('json-view');
+        const btn = document.getElementById('toggle-view-btn');
+
+        if (currentView === 'visual') {
+            showLoader("Formatting JSON...", "Processing syntax highlighting for site map");
+            setTimeout(() => {
+                visual.style.display = 'none';
+                json.style.display = 'block';
+                currentView = 'json';
+                btn.innerText = 'Switch to Visual';
+
+                // Synchronous Highlighting (wrapped in timeout to allow loader to render)
+                const code = document.getElementById('json-content');
+                const jsonStrForHighlight = JSON.stringify(conciseTree, null, 2);
+                try {
+                    const highlighted = Prism.highlight(jsonStrForHighlight, Prism.languages.json, 'json');
+                    code.innerHTML = highlighted;
+                } catch (e) {
+                    console.error("Highlighting failed:", e);
+                    code.textContent = jsonStrForHighlight; // Fallback to raw text
+                }
+                hideLoader();
+            }, 100);
+        } else {
+            showLoader("Restoring Visualizer...", "Recalculating D3 hierarchy layout");
+            setTimeout(() => {
+                visual.style.display = 'block';
+                json.style.display = 'none';
+                currentView = 'visual';
+                btn.innerText = 'Switch to JSON';
+                update(root);
+                hideLoader();
+            }, 100);
+        }
+    }
+
+    function exportJson() {
+        if (!conciseTree) return;
+        const blob = new Blob([JSON.stringify(conciseTree, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `crawl_hierarchy_{{ crawl_id }}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+
+    function copyJson() {
+        const jsonText = document.getElementById('json-content').textContent;
+        navigator.clipboard.writeText(jsonText).then(() => {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = 'Copied!';
+            setTimeout(() => btn.innerText = originalText, 2000);
+        });
+    }
+
+    init();
+</script>
+
+<link rel="stylesheet" href="/assets/hierarchy.css">
+{% endblock %}

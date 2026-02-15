@@ -9,16 +9,24 @@
         </div>
         {% endfor %}
         {% if site.finished %}
-        <div class="log-entry" style="border-top: 1px dotted #ccc; margin-top: 0.5rem; padding-top: 0.5rem;">
-            <span class="status status-END">FINISH</span>
-            <span class="url" style="font-weight: bold;">Crawling task completed for {{ site.url }}</span>
+        <div class="log-entry"
+            style="border-top: 1px dotted #ccc; margin-top: 0.5rem; padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+                <span class="status status-END">FINISH</span>
+                <span class="url" style="font-weight: bold;">Crawling task completed for {{ site.url }}</span>
+            </div>
+            <a href="/hierarchy/{{ site.id }}" class="hierarchy-link"
+                style="font-size: 0.8rem; color: #4a7a8c; text-decoration: none;">View Hierarchy</a>
         </div>
         {% else %}
-        <div class="log-entry" style="margin-top: 1rem;">
+        <div class="log-entry"
+            style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
             <form hx-post="/control/stop" hx-target="this" hx-swap="outerHTML">
                 <input type="hidden" name="id" value="{{ site.id }}">
                 <button type="submit" class="btn-stop">STOP</button>
             </form>
+            <a href="/hierarchy/{{ site.id }}" target="_blank" class="hierarchy-link"
+                style="font-size: 0.8rem; color: #4a7a8c; text-decoration: none;">Live Tree View</a>
         </div>
         {% endif %}
     </div>
