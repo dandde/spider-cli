@@ -128,13 +128,82 @@
             color: #333;
             word-break: break-all;
         }
+
+        /* Help Page Styling */
+        .help-section {
+            padding-bottom: 2rem;
+            border-bottom: 1px dotted #ccc;
+            margin-bottom: 2rem;
+        }
+
+        .help-section h2 {
+            font-size: 1.5rem;
+            border-left: 4px solid #000;
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 1rem;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+        }
+
+        code {
+            background-color: #f1f1f1;
+            padding: 0.1rem 0.3rem;
+            border-radius: 2px;
+            font-size: 0.9rem;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 0.8rem;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .nav-links {
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .nav-links a {
+            color: #4a7a8c;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }
+
+        .nav-links a:hover {
+            border-bottom: 1px solid #4a7a8c;
+        }
     </style>
     <title>{% block title %}Flawless Crawler{% endblock %}</title>
 </head>
 
 <body>
-    <header>
+    <header style="display: flex; justify-content: space-between; align-items: baseline;">
         <h1>Flawless Crawler</h1>
+        <div class="nav-links">
+            <a href="/">Dashboard</a> |
+            <a href="/help">Help Guide</a>
+        </div>
     </header>
     <main class="container">
         {% block content %}{% endblock %}

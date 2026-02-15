@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration Help - Flawless Crawler{% endblock %}
+
+{% block content %}
+<div class="help-section">
+    <h2>Overview</h2>
+    <p>Spider CLI uses a flexible configuration system supporting JSON, YAML, and TOML formats. You can define entry
+        points, extraction rules, and crawl limits per job.</p>
+</div>
+
+<div class="help-section">
+    <h2>Configuration Structure</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>name</code></td>
+                <td>String</td>
+                <td>Unique ID for the crawl session.</td>
+            </tr>
+            <tr>
+                <td><code>start_urls</code></td>
+                <td>Array</td>
+                <td>List of URLs to begin crawling from.</td>
+            </tr>
+            <tr>
+                <td><code>selectors</code></td>
+                <td>Map</td>
+                <td>Field names and their selector rules.</td>
+            </tr>
+            <tr>
+                <td><code>concurrency</code></td>
+                <td>Integer</td>
+                <td>Max concurrent requests (default: 1).</td>
+            </tr>
+            <tr>
+                <td><code>delay_ms</code></td>
+                <td>Integer</td>
+                <td>Delay between requests in ms.</td>
+            </tr>
+            <tr>
+                <td><code>max_depth</code></td>
+                <td>Integer</td>
+                <td>Maximum crawl depth.</td>
+            </tr>
+            <tr>
+                <td><code>extends</code></td>
+                <td>Path</td>
+                <td>Path to a parent config for inheritance.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="help-section">
+    <h2>Selector System</h2>
+    <p>We support standard CSS and XPath selectors. You can use simple strings or advanced objects.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Standard Format</th>
+                <th>Standard Example</th>
+                <th>Crawler String Format</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>CSS Tag</strong></td>
+                <td><code>div</code></td>
+                <td><code>"css:div"</code></td>
+            </tr>
+            <tr>
+                <td><strong>CSS Class</strong></td>
+                <td><code>.quote</code></td>
+                <td><code>"css:.quote"</code></td>
+            </tr>
+            <tr>
+                <td><strong>Attribute</strong></td>
+                <td><code>img[src]</code></td>
+                <td><code>"css:img"</code> (with <code>attr: "src"</code>)</td>
+            </tr>
+            <tr>
+                <td><strong>XPath Text</strong></td>
+                <td><code>//a/text()</code></td>
+                <td><code>"xpath://a/text()"</code></td>
+            </tr>
+            <tr>
+                <td><strong>XPath Attr</strong></td>
+                <td><code>//a/@href</code></td>
+                <td><code>"xpath://a"</code> (with <code>attr: "href"</code>)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Example CSS Selector</h3>
+    <pre><code>"headline": "css:.titleline > a"</code></pre>
+
+    <h3>Example Advanced Selector (for attributes)</h3>
+    <pre><code>"hero_image": {
+    "selector": "css:img.hero",
+    "attr": "src"
+}</code></pre>
+
+    <h3>Example XPath Selector (text)</h3>
+    <pre><code>"post_title": "xpath://h1[@class='post-title']/text()"</code></pre>
+
+    <h3>Example XPath Selector (attribute)</h3>
+    <pre><code>"article_link": {
+    "selector": "xpath://div[@class='article-card']/a",
+    "attr": "href"
+}</code></pre>
+</div>
+
+<div class="help-section">
+    <h2>Full Example (JSON)</h2>
+    <pre><code>{
+  "name": "hacker-news-crawl",
+  "start_urls": ["https://news.ycombinator.com"],
+  "selectors": {
+    "headline": "css:.titleline > a",
+    "score": "css:.score"
+  },
+  "concurrency": 2,
+  "max_depth": 2
+}</code></pre>
+</div>
+
+<div class="help-section">
+    <h2>TOML Specifics</h2>
+    <p><strong>Note:</strong> In TOML, global fields must be defined <em>before</em> the <code>[selectors]</code> block.
+    </p>
+    <pre><code>name = "hn-toml"
+concurrency = 5
+start_urls = ["https://news.ycombinator.com"]
+
+[selectors]
+headline = "css:.titleline > a"</code></pre>
+</div>
+
+<div class="help-section">
+    <h2>Inheritance</h2>
+    <p>Use the <code>extends</code> field to inherit settings from another file. This is perfect for sharing common
+        selectors or rate limits across different sites.</p>
+</div>
+{% endblock %}

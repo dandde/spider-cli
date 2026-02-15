@@ -1,112 +1,126 @@
 # ⚙️ Spider CLI Configuration Guide
 
-`spider-cli` supports a flexible configuration system using **JSON**, **YAML**, and **TOML**. It features hierarchical inheritance, allowing you to share common settings across multiple crawl jobs.
+`spider-cli` supports a flexible, multi-format configuration system. You can define your scraping jobs in **JSON**, **YAML**, or **TOML**.
 
 ---
 
-## 🏗️ Configuration Schema
+## 🏗️ Configuration Structure
+
+A spider configuration file consists of the following top-level fields:
 
 | Field | Type | Default | Description |
 |:--- |:--- |:--- |:--- |
 | `name` | String | `""` | Unique identifier for the crawl session. |
 | `start_urls` | Array | `[]` | List of entry points for the crawler. |
 | `selectors` | Map | `{}` | Map of field names to selector configurations. |
-| `concurrency` | Integer | `1` | Number of concurrent workers. |
+| `concurrency` | Integer | `1` | Number of concurrent requests. |
 | `delay_ms` | Integer | `0` | Delay between requests in milliseconds. |
-| `respect_robots`| Boolean | `false`| Whether to obey `robots.txt`. |
+| `respect_robots`| Boolean | `false`| Whether to obey `robots.txt` rules. |
 | `blacklist` | Array | `[]` | URL patterns to exclude (glob format). |
 | `whitelist` | Array | `[]` | URL patterns to exclusively follow (glob format). |
 | `max_depth` | Integer | `None` | Maximum depth from the `start_urls`. |
-| `extends` | Path | `None` | Path to a parent config file to inherit from. |
+| `extends` | Path | `None` | Path to a parent config file for inheritance. |
 
 ---
 
-## 🎯 Selector System
+## 🎯 Selector System (Two Variants)
 
-The `selectors` map allows you to define what data to extract from each page.
+The crawler supports two ways to define selectors. Choose the one that fits your complexity level.
 
-### 1. Simple Selectors
-A simple string that defaults to CSS but can be prefixed.
-- **CSS**: `"css:div.title"` or just `"div.title"`
-- **XPath**: `"xpath://h1/text()"`
+### 1. Simple String Selectors (Recommended)
+You can use standard selector strings with an optional engine prefix. If no prefix is provided, `css:` is assumed.
 
-### 2. Advanced Selectors
-For capturing specific attributes.
+- **CSS Selectors**: `css:.quote.text` or simply `.quote.text`
+- **XPath Selectors**: `xpath://div[@class='quote']`
+
+### 2. Advanced Structured Selectors
+For complex logic, you can use structured objects. This is useful for capturing specific attributes or building nested structures.
+
+| Standard Format | Standard Example | Crawler String Format | Advanced Object (JSON Example) |
+|:--- |:--- |:--- |:--- |
+| **CSS Tag** | `div` | `"css:div"` | `{"selector": "div"}` |
+| **CSS Class** | `.quote` | `"css:.quote"` | `{"selector": ".quote"}` |
+| **CSS ID** | `#main` | `"css:#main"` | `{"selector": "#main"}` |
+| **Attribute** | `img[src]` | `"css:img"` | `{"selector": "img", "attr": "src"}` |
+| **XPath Text** | `//a/text()` | `"xpath://a/text()"` | `{"selector": "//a/text()"}` |
+| **XPath Attr** | `//a/@href` | `"xpath://a/@href"` | `{"selector": "//a", "attr": "href"}` |
+
+---
+
+## 🚀 Full Examples
+
+````carousel
 ```json
 {
+  "name": "hacker-news-complex",
+  "start_urls": ["https://news.ycombinator.com"],
   "selectors": {
-    "image_src": {
-      "selector": "css:img.hero",
-      "attr": "src"
-    }
-  }
+    "headline": "css:.titleline > a",
+    "score": "css:.score",
+    "user": "css:.hnuser"
+  },
+  "concurrency": 2,
+  "max_depth": 2
 }
 ```
+<!-- slide -->
+```yaml
+name: hacker-news-yaml
+start_urls:
+  - https://news.ycombinator.com
+selectors:
+  headline:
+    selector: css:.titleline > a
+    attr: null
+  score: css:.score
+  user: css:.hnuser
+concurrency: 5
+```
+<!-- slide -->
+```toml
+name = "hacker-news-toml"
+concurrency = 5
+start_urls = ["https://news.ycombinator.com"]
+
+[selectors]
+headline = "css:.titleline > a"
+score = "css:.score"
+user = "css:.hnuser"
+```
+````
 
 ---
 
-## 🔄 Inheritance (`extends`)
+## 🏗️ Configuration Inheritance (`extends`)
 
-You can create a `base.json` with common settings and extend it in specialized configs.
+Reuse shared logic using the `extends` field.
 
 **base.json**
 ```json
 {
-  "concurrency": 2,
-  "respect_robots": true,
+  "concurrency": 5,
+  "delay_ms": 1000,
   "selectors": {
-    "title": "css:title"
+    "site_title": "css:title"
   }
 }
 ```
 
-**hacker_news.json**
+**specialized.json**
 ```json
 {
   "extends": "base.json",
-  "name": "hn-crawl",
-  "start_urls": ["https://news.ycombinator.com"],
-  "selectors": {
-    "headline": "css:.titleline > a"
-  }
+  "name": "my-spider",
+  "start_urls": ["https://example.com"]
 }
 ```
-*The `hacker_news.json` will inherit the `concurrency`, `respect_robots`, and the `title` selector from `base.json`.*
 
----
-
-## 📝 Format Examples
-
-### TOML (`configs/site.toml`)
-> [!IMPORTANT]
-> In TOML, global fields must be defined **before** the `[selectors]` table.
-
-```toml
-name = "my-site"
-concurrency = 5
-start_urls = ["https://example.com"]
-
-[selectors]
-title = "css:h1"
-body = "css:p"
-```
-
-### YAML (`configs/site.yaml`)
-```yaml
-name: my-site
-start_urls:
-  - https://example.com
-selectors:
-  title: css:h1
-  body:
-    selector: css:p
-    attr: null
-```
+The `specialized.json` will inherit the `concurrency`, `delay_ms`, and the `site_title` selector from `base.json`.
 
 ---
 
 ## 🔍 URL Normalization & Deduplication
 
-`spider-cli` uses a **Zero-Copy URL Parser** to ensure high performance and reliable deduplication.
-- **Normalization**: Fragments are stripped, query parameters are sorted, and trailing slashes are unified.
-- **Persistence**: Visited URLs are stored in `crawl_state.db`. If you restart a crawl with the same `name` (or resume a session), duplicates will be skipped automatically.
+`spider-cli` uses a **Zero-Copy URL Parser** for high efficiency.
+- **Normalization**: Fragments are stripped, query params are sorted, and trailing slashes are unified.
+- **Persistence**: Results are stored in `crawl_state.db`. Resuming a crawl with the same `name` will skip already visited URLs.

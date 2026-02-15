@@ -45,6 +45,10 @@ struct StatsTemplate {
     sites: Vec<SiteDisplay>,
 }
 
+#[derive(Template)]
+#[template(path = "help.html")]
+struct HelpTemplate {}
+
 #[derive(Deserialize)]
 struct StartParams {
     url: Option<String>,
@@ -70,6 +74,7 @@ impl DashboardServer {
 
         let app = Router::new()
             .route("/", get(index))
+            .route("/help", get(help))
             .route("/stats", get(stats))
             .route("/control/start", post(start_crawl))
             .route("/control/stop", post(stop_crawl))
@@ -98,6 +103,17 @@ async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let sites = state.sites.read().unwrap().clone();
     let template = StatsTemplate { sites };
     match template.render() {
+        Ok(html) => axum::response::Html(html).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Template error: {}", e),
+        )
+            .into_response(),
+    }
+}
+
+async fn help() -> impl IntoResponse {
+    match (HelpTemplate {}).render() {
         Ok(html) => axum::response::Html(html).into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
