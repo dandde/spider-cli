@@ -1,0 +1,54 @@
+/* TreeMap Specific Styling */
+.treemap-node {
+    cursor: pointer;
+    transition: filter 0.2s;
+}
+
+.treemap-node:hover {
+    filter: brightness(0.92);
+}
+
+.treemap-rect {
+    stroke: #fff;
+    stroke-width: 1px;
+}
+
+.treemap-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    pointer-events: none;
+    fill: #1a1a1a;
+}
+
+.treemap-parent {
+    font-weight: 700;
+    font-size: 13px;
+    fill: #4a7a8c;
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb-container {
+    padding: 0.75rem 1.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    color: #666;
+}
+
+.breadcrumb-item {
+    cursor: pointer;
+    color: #4a7a8c;
+    font-weight: 600;
+}
+
+.breadcrumb-item:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-separator {
+    color: #ccc;
+}

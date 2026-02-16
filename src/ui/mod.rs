@@ -74,9 +74,30 @@ impl DashboardServer {
     }
 
     pub async fn run(self, port: u16) -> Result<()> {
+        let existing_crawls = self
+            .state_manager
+            .get_all_crawls()
+            .await
+            .unwrap_or_default();
+        let mut initial_sites = vec![];
+        for c in existing_crawls {
+            let url = c
+                .name
+                .strip_prefix("Crawl: ")
+                .or_else(|| c.name.strip_prefix("UI Crawl: "))
+                .unwrap_or(&c.name)
+                .to_string();
+            initial_sites.push(SiteDisplay {
+                id: c.id,
+                url,
+                entries: vec![],
+                finished: true,
+            });
+        }
+
         let state = Arc::new(AppState {
             state_manager: self.state_manager,
-            sites: RwLock::new(vec![]),
+            sites: RwLock::new(initial_sites),
             tokens: RwLock::new(HashMap::new()),
         });
 
@@ -110,7 +131,15 @@ async fn index() -> impl IntoResponse {
     }
 }
 
-async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn stats(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // If not an HTMX request, redirect to home
+    if !headers.contains_key("hx-request") {
+        return axum::response::Redirect::to("/").into_response();
+    }
+
     let sites = state.sites.read().unwrap().clone();
     let template = StatsTemplate { sites };
     match template.render() {

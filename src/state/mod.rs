@@ -7,6 +7,14 @@ pub struct StateManager {
     pool: Pool<Sqlite>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CrawlSummary {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub updated_at: String,
+}
+
 impl StateManager {
     pub async fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
         let db_url = format!("sqlite:{}", db_path.as_ref().to_string_lossy());
@@ -82,6 +90,24 @@ impl StateManager {
         Ok(urls)
     }
 
+    pub async fn get_all_crawls(&self) -> Result<Vec<CrawlSummary>> {
+        let rows = sqlx::query_as::<_, (i64, String, String, String)>(
+            "SELECT id, name, status, updated_at FROM crawls ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, status, updated_at)| CrawlSummary {
+                id,
+                name,
+                status,
+                updated_at,
+            })
+            .collect())
+    }
+
     pub async fn get_results_urls(&self, crawl_id: i64) -> Result<Vec<String>> {
         // Alias for get_visited_urls but specifically for results table discovery
         self.get_visited_urls(crawl_id).await
@@ -130,12 +156,29 @@ impl StateManager {
         data: &serde_json::Value,
     ) -> Result<()> {
         let data_str = serde_json::to_string(data)?;
+
+        // Update updated_at for the crawl
+        sqlx::query("UPDATE crawls SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(crawl_id)
+            .execute(&self.pool)
+            .await?;
+
         sqlx::query("INSERT OR IGNORE INTO results (crawl_id, url, data) VALUES (?, ?, ?)")
             .bind(crawl_id)
             .bind(url)
             .bind(data_str)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    pub async fn complete_crawl(&self, crawl_id: i64) -> Result<()> {
+        sqlx::query(
+            "UPDATE crawls SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(crawl_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

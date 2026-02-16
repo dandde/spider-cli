@@ -174,6 +174,7 @@ impl Crawler {
             }
         }
 
+        let _ = self.state_manager.complete_crawl(self.crawl_id).await;
         Ok(())
     }
 }

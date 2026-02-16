@@ -3,6 +3,8 @@
 {% block title %}Site Hierarchy - Flawless Crawler{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="/assets/hierarchy_treemap.css">
+<link rel="stylesheet" href="/assets/hierarchy_indented.css">
 <!-- Prism.js for JSON Highlighting (Local Assets to avoid Security Error with Web Workers) -->
 <link rel="stylesheet" href="/assets/vendor/prism/prism.min.css">
 <script src="/assets/vendor/prism/prism.min.js"></script>
@@ -15,7 +17,7 @@
     <div id="loading-overlay"
         style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
         <div class="spinner"></div>
-        <div style="margin-top: 1.5rem; color: #4a7a8c; font-weight: 600; font-size: 1.1rem; letter-spacing: 0.02em;"
+        <div style="margin-top: 1.5rem; color: #b3b3b3; font-weight: 600; font-size: 1.1rem; letter-spacing: 0.02em;"
             id="loader-text">Switching Views...</div>
         <div style="margin-top: 0.5rem; color: #888; font-size: 0.85rem;" id="loader-subtext">Processing data
             visualization</div>
@@ -43,7 +45,7 @@
                     title="Reset View">Reset</button>
             </div>
             <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
-            <button id="toggle-view-btn" onclick="toggleView()" class="btn btn-primary">Switch to JSON</button>
+            <button id="toggle-view-btn" onclick="toggleView()" class="btn btn-primary">Switch to TreeMap</button>
         </div>
     </div>
 
@@ -77,6 +79,23 @@
         </div>
     </div>
 
+    <!-- TreeMap Explorer View (NEW) -->
+    <div id="treemap-view" class="card"
+        style="display: none; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; min-height: 700px; position: relative; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div id="treemap-breadcrumb" class="breadcrumb-container"
+            style="min-height: 40px; padding: 10px 20px; background: #f8f9fa; border-bottom: 1px solid #eee;">
+            <span class="breadcrumb-item" onclick="resetTreemap()"
+                style="cursor: pointer; color: #4a7a8c; font-weight: bold;">Root</span>
+        </div>
+        <div id="treemap-chart" style="width: 100%; height: auto; min-height: 660px;"></div>
+    </div>
+
+    <!-- Indented Tree Explorer View (NEW) -->
+    <div id="indented-view" class="card"
+        style="display: none; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; min-height: 700px; position: relative; overflow-y: auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div id="indented-chart" style="width: 100%; height: auto; padding: 2rem;"></div>
+    </div>
+
     <!-- JSON View -->
     <div id="json-view"
         style="display: none; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
@@ -94,7 +113,7 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
     let currentView = 'visual';
-    let root, svg, gLink, gNode, collectionData, conciseTree;
+    let root, svg, gLink, gNode, collectionData, conciseTree, treemapData;
     let i = 0;
     let duration = 600;
     let isInitialLoad = true;
@@ -152,6 +171,10 @@
                 };
             }
 
+            treemapData = d3.hierarchy(data)
+                .sum(d => d.urlCount || (d.urls ? d.urls.length : 0))
+                .sort((a, b) => b.value - a.value);
+
             root = d3.hierarchy(data);
             root.x0 = 0;
             root.y0 = 0;
@@ -190,7 +213,299 @@
         }
     }
 
-    let zoomBehavior, svgG;
+    /* TreeMap Logic */
+    let treemapSvg;
+    const treemapHeight = 700;
+
+    function initTreemap() {
+        if (!treemapData) return;
+        const chartDiv = document.getElementById('treemap-chart');
+        const width = chartDiv.clientWidth || 1400;
+
+        d3.select("#treemap-chart").selectAll("*").remove();
+
+        treemapSvg = d3.select("#treemap-chart").append("svg")
+            .attr("viewBox", [0, 0, width, treemapHeight])
+            .attr("width", "100%")
+            .attr("height", treemapHeight)
+            .style("font-family", "'Inter', sans-serif");
+
+        renderTreemap(treemapData, width, treemapHeight);
+    }
+
+    function renderTreemap(d, width, height) {
+        if (!d) return;
+
+        const treemap = d3.treemap()
+            .tile(d3.treemapBinary)
+            .size([width, height])
+            .paddingInner(1)
+            .paddingOuter(2)
+            .paddingTop(20)
+            .round(true);
+
+        // Create a local hierarchy root for the zoomed node to ensure clean layout
+        // while preserving the original node 'd' for breadcrumb navigation.
+        const localRoot = d3.hierarchy(d.data)
+            .sum(node => node.urlCount || (node.urls ? node.urls.length : 0))
+            .sort((a, b) => b.value - a.value);
+
+        treemap(localRoot);
+
+        const nodes = localRoot.children || [];
+
+        // Ensure d is also sorted the same way if it has children
+        if (d.children) {
+            d.sort((a, b) => b.value - a.value);
+            // Map each local node to its original hierarchy counterpart
+            nodes.forEach((localD, idx) => {
+                localD._original = d.children[idx];
+            });
+        }
+
+        const group = treemapSvg.append("g")
+            .selectAll("g")
+            .data(nodes)
+            .join("g")
+            .attr("class", "treemap-node");
+
+        group.append("rect")
+            .attr("class", "treemap-rect")
+            .attr("x", d => isNaN(d.x0) ? 0 : d.x0)
+            .attr("y", d => isNaN(d.y0) ? 0 : d.y0)
+            .attr("width", d => {
+                const w = d.x1 - d.x0;
+                return isNaN(w) ? 0 : Math.max(0, w);
+            })
+            .attr("height", d => {
+                const h = d.y1 - d.y0;
+                return isNaN(h) ? 0 : Math.max(0, h);
+            })
+            .attr("fill", d => d.children ? "#4a7a8c" : "#e3f2fd")
+            .style("cursor", d => d.children ? "pointer" : "default")
+            .on("click", (event, localD) => {
+                // Use the original node reference for the next zoom level to keep breadcrumbs intact
+                if (localD.children && localD._original) zoomTreemap(localD._original);
+            });
+
+        group.append("text")
+            .attr("class", "treemap-label")
+            .attr("x", d => (isNaN(d.x0) ? 0 : d.x0) + 5)
+            .attr("y", d => (isNaN(d.y0) ? 0 : d.y0) + 15)
+            .text(d => {
+                const name = d.data.name;
+                const weight = d.value;
+                const w = d.x1 - d.x0;
+                return (!isNaN(w) && w > 60) ? `${name} (${weight})` : "";
+            })
+            .style("fill", d => d.children ? "white" : "#333")
+            .style("font-size", d => {
+                const w = d.x1 - d.x0;
+                if (isNaN(w) || w <= 0) return "0px";
+                return Math.min(Math.max(10, w / 10), 12) + "px";
+            })
+            .style("pointer-events", "none");
+
+        updateBreadcrumbs(d);
+    }
+
+    function zoomTreemap(d) {
+        const chartDiv = document.getElementById('treemap-chart');
+        const width = chartDiv.clientWidth || 1400;
+
+        d3.select("#treemap-chart").selectAll("svg > g").remove();
+        renderTreemap(d, width, treemapHeight);
+    }
+
+    function resetTreemap() {
+        initTreemap();
+    }
+
+    function updateBreadcrumbs(d) {
+        const breadcrumb = document.getElementById('treemap-breadcrumb');
+        const path = [];
+        let curr = d;
+        while (curr) {
+            path.unshift(curr);
+            curr = curr.parent;
+        }
+
+        breadcrumb.innerHTML = "";
+        path.forEach((node, index) => {
+            const span = document.createElement('span');
+            span.className = "breadcrumb-item";
+            span.innerText = node.data.name || "Discovery Core";
+            span.style.cursor = "pointer";
+            span.style.color = "#4a7a8c";
+            span.style.fontWeight = "bold";
+            span.onclick = () => {
+                // Special case for root: always use the absolute global treemapData
+                const targetNode = (index === 0) ? treemapData : node;
+                const chartDiv = document.getElementById('treemap-chart');
+                const width = chartDiv.clientWidth || 1400;
+                d3.select("#treemap-chart").selectAll("svg > g").remove();
+                renderTreemap(targetNode, width, treemapHeight);
+            };
+            breadcrumb.appendChild(span);
+
+            if (index < path.length - 1) {
+                const sep = document.createElement('span');
+                sep.className = "breadcrumb-separator";
+                sep.innerText = " / ";
+                sep.style.margin = "0 8px";
+                sep.style.color = "#bbb";
+                breadcrumb.appendChild(sep);
+            }
+        });
+    }
+
+    /* Indented Tree Logic (v15 Exact Alignment) */
+    let iRoot;
+
+    function initIndentedTree(expandAllNodes = null) {
+        const chartDiv = document.getElementById('indented-chart');
+        d3.select("#indented-chart").selectAll("*").remove();
+
+        const nodeHeight = 32;
+        const indentSize = 25;
+        const duration = 750;
+        const width = chartDiv.clientWidth || 1400;
+
+        const svg = d3.select("#indented-chart").append("svg")
+            .attr("width", width)
+            .append("g")
+            .attr("transform", "translate(40,40)");
+
+        iRoot = d3.hierarchy(root.data)
+            .sum(d => d.urlCount || (d.urls ? d.urls.length : 0));
+
+        if (expandAllNodes === true) {
+            expandRecursive(iRoot);
+        } else if (expandAllNodes === false) {
+            iRoot.descendants().forEach(d => {
+                if (d.depth > 0 && d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                }
+            });
+        } else {
+            // Default: collapse beyond depth 0
+            iRoot.descendants().forEach(d => {
+                if (d.depth > 0 && d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                }
+            });
+        }
+
+        function updateIndented(source) {
+            const nodes = iRoot.descendants();
+            const height = nodes.length * nodeHeight + 80;
+            d3.select("#indented-chart svg")
+                .transition().duration(duration)
+                .attr("height", height);
+
+            nodes.forEach((d, i) => {
+                d.x = d.depth * indentSize;
+                d.y = i * nodeHeight;
+            });
+
+            const node = svg.selectAll(".indented-node")
+                .data(nodes, d => d.id || (d.id = Math.random().toString(36).substr(2, 9)));
+
+            const nodeEnter = node.enter().append("g")
+                .attr("class", d => "indented-node " + (d._children ? "collapsed" : ""))
+                .attr("transform", d => `translate(0,${source.y})`)
+                .style("opacity", 0);
+
+            nodeEnter.append("rect")
+                .attr("class", "indented-rect")
+                .attr("width", width - 80)
+                .attr("height", nodeHeight)
+                .attr("y", -nodeHeight / 2)
+                .attr("fill", "transparent")
+                .style("cursor", "pointer")
+                .on("click", (event, d) => {
+                    if (d.children || d._children) {
+                        d.children = d.children ? null : d._children;
+                        updateIndented(d);
+                    } else if (d.data.nodeType === 'File' && d.data.urls && d.data.urls.length > 0) {
+                        window.open(d.data.urls[0].full_url, '_blank');
+                    }
+                });
+
+            nodeEnter.append("circle")
+                .attr("r", 4.5)
+                .style("cursor", "pointer")
+                .attr("fill", d => d._children ? "lightsteelblue" : "#fff")
+                .attr("stroke", "steelblue")
+                .attr("stroke-width", "1.5px")
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    if (d.children || d._children) {
+                        d.children = d.children ? null : d._children;
+                        updateIndented(d);
+                    }
+                });
+
+            nodeEnter.append("text")
+                .attr("dy", "0.35em")
+                .attr("x", 15) // Restored offset for circle
+                .style("cursor", "pointer")
+                .style("font", "14px sans-serif")
+                .text(d => {
+                    const name = d.data.name || "Root";
+                    const count = (d.children || d._children) ? ` (${d.value})` : "";
+                    return name + count;
+                })
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    if (d.children || d._children) {
+                        d.children = d.children ? null : d._children;
+                        updateIndented(d);
+                    } else if (d.data.nodeType === 'File' && d.data.urls && d.data.urls.length > 0) {
+                        window.open(d.data.urls[0].full_url, '_blank');
+                    }
+                });
+
+            const nodeUpdate = node.merge(nodeEnter);
+
+            nodeUpdate.transition().duration(duration)
+                .attr("transform", d => `translate(${d.x},${d.y})`)
+                .style("opacity", 1);
+
+            nodeUpdate.attr("class", d => "indented-node " + (d._children ? "collapsed" : ""));
+            nodeUpdate.select("circle").attr("fill", d => d._children ? "lightsteelblue" : "#fff");
+
+
+            node.exit().transition().duration(duration)
+                .attr("transform", d => `translate(0,${source.y})`)
+                .style("opacity", 0)
+                .remove();
+
+            const link = svg.selectAll(".indented-link")
+                .data(nodes.filter(d => d.parent), d => d.id);
+
+            const linkEnter = link.enter().insert("path", "g")
+                .attr("class", "indented-link")
+                .attr("d", d => {
+                    return `M ${source.x},${source.y} V ${source.y} H ${source.x}`;
+                });
+
+            link.merge(linkEnter).transition().duration(duration)
+                .attr("d", d => {
+                    return `M ${d.parent.x},${d.parent.y} V ${d.y} H ${d.x}`;
+                });
+
+            link.exit().transition().duration(duration)
+                .attr("d", d => {
+                    return `M ${source.x},${source.y} V ${source.y} H ${source.x}`;
+                })
+                .remove();
+        }
+
+        updateIndented(iRoot);
+    }
 
     function fitToView(transition = true) {
         if (!svgG || !svg) return;
@@ -256,9 +571,13 @@
     function expandAll() {
         showLoader("Expanding All...", "Calculating layout for entire tree");
         setTimeout(() => {
-            expandRecursive(root);
-            update(root);
-            fitToView(true);
+            if (currentView === 'visual') {
+                expandRecursive(root);
+                update(root);
+                fitToView(true);
+            } else if (currentView === 'indented') {
+                initIndentedTree(true);
+            }
             hideLoader();
         }, 50);
     }
@@ -266,11 +585,15 @@
     function collapseAll() {
         showLoader("Collapsing All...", "Cleaning up hierarchy");
         setTimeout(() => {
-            if (root.children) {
-                root.children.forEach(collapseRecursive);
+            if (currentView === 'visual') {
+                if (root.children) {
+                    root.children.forEach(collapseRecursive);
+                }
+                update(root);
+                fitToView(true);
+            } else if (currentView === 'indented') {
+                initIndentedTree(false);
             }
-            update(root);
-            fitToView(true);
             hideLoader();
         }, 50);
     }
@@ -311,8 +634,8 @@
 
         nodeEnter.append("circle")
             .attr("r", 6)
-            .attr("fill", d => d._children ? "#4a7a8c" : "#fff")
-            .attr("stroke", d => d.data.nodeType === 'File' ? "#28a745" : "#4a7a8c")
+            .attr("fill", d => d._children ? "#fcc178" : "#fff")
+            .attr("stroke", d => d.data.nodeType === 'File' ? "#28a745" : "#fcc178")
             .attr("stroke-width", 2)
             .on("mouseover", showTooltip)
             .on("mouseout", hideTooltip);
@@ -337,7 +660,7 @@
             .attr("stroke-opacity", 1);
 
         nodeUpdate.select("circle")
-            .attr("fill", d => d._children ? "#4a7a8c" : "#fff");
+            .attr("fill", d => d._children ? "#fcc178" : "#fff");
 
         const nodeExit = node.exit().transition().duration(isInitialLoad ? 0 : duration).remove()
             .attr("transform", d => `translate(${source.y},${source.x})`)
@@ -396,18 +719,45 @@
 
     function toggleView() {
         const visual = document.getElementById('visual-view');
+        const treemap = document.getElementById('treemap-view');
+        const indented = document.getElementById('indented-view');
         const json = document.getElementById('json-view');
         const btn = document.getElementById('toggle-view-btn');
 
         if (currentView === 'visual') {
-            showLoader("Formatting JSON...", "Processing syntax highlighting for site map");
+            showLoader("Building TreeMap...", "Calculating spatial distribution");
             setTimeout(() => {
                 visual.style.display = 'none';
+                treemap.style.display = 'block';
+                indented.style.display = 'none';
+                json.style.display = 'none';
+                currentView = 'treemap';
+                btn.innerText = 'Switch to Indented';
+                initTreemap();
+                hideLoader();
+            }, 100);
+        } else if (currentView === 'treemap') {
+            showLoader("Building Explorer...", "Formatting indented tree hierarchy");
+            setTimeout(() => {
+                visual.style.display = 'none';
+                treemap.style.display = 'none';
+                indented.style.display = 'block';
+                json.style.display = 'none';
+                currentView = 'indented';
+                btn.innerText = 'Switch to JSON';
+                initIndentedTree();
+                hideLoader();
+            }, 100);
+        } else if (currentView === 'indented') {
+            showLoader("Formatting JSON...", "Processing syntax highlighting");
+            setTimeout(() => {
+                visual.style.display = 'none';
+                treemap.style.display = 'none';
+                indented.style.display = 'none';
                 json.style.display = 'block';
                 currentView = 'json';
                 btn.innerText = 'Switch to Visual';
 
-                // Synchronous Highlighting (wrapped in timeout to allow loader to render)
                 const code = document.getElementById('json-content');
                 const jsonStrForHighlight = JSON.stringify(conciseTree, null, 2);
                 try {
@@ -415,7 +765,7 @@
                     code.innerHTML = highlighted;
                 } catch (e) {
                     console.error("Highlighting failed:", e);
-                    code.textContent = jsonStrForHighlight; // Fallback to raw text
+                    code.textContent = jsonStrForHighlight;
                 }
                 hideLoader();
             }, 100);
@@ -423,26 +773,50 @@
             showLoader("Restoring Visualizer...", "Recalculating D3 hierarchy layout");
             setTimeout(() => {
                 visual.style.display = 'block';
+                treemap.style.display = 'none';
+                indented.style.display = 'none';
                 json.style.display = 'none';
                 currentView = 'visual';
-                btn.innerText = 'Switch to JSON';
+                btn.innerText = 'Switch to TreeMap';
                 update(root);
                 hideLoader();
             }, 100);
         }
     }
 
-    function exportJson() {
+    async function exportJson() {
         if (!conciseTree) return;
-        const blob = new Blob([JSON.stringify(conciseTree, null, 2)], { type: 'application/json' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `crawl_hierarchy_{{ crawl_id }}.json`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        const data = JSON.stringify(conciseTree, null, 2);
+        const fileName = `crawl_hierarchy_{{ crawl_id }}.json`;
+
+        if ('showSaveFilePicker' in window) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [{
+                        description: 'JSON Files',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(data);
+                await writable.close();
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Save failed:', err);
+                }
+            }
+        } else {
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
     }
 
     function copyJson() {

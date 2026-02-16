@@ -254,9 +254,9 @@ impl<'a> TreeNode<'a> {
         }
 
         let icon = match self.node_type {
-            NodeType::Domain => "📦",
-            NodeType::Folder => "📁",
-            NodeType::File => "📄",
+            NodeType::Domain => "",
+            NodeType::Folder => "",
+            NodeType::File => "",
         };
 
         let url_count = if is_root {

@@ -1,0 +1,43 @@
+/* Exact Indented Tree Alignment (v15) */
+.indented-node {
+    cursor: pointer;
+}
+
+.indented-node circle {
+    fill: #fff;
+    stroke: steelblue;
+    stroke-width: 1.5px;
+}
+
+.indented-node.collapsed circle {
+    fill: lightsteelblue;
+}
+
+.indented-node text {
+    font: 14px sans-serif;
+    fill: #333;
+    user-select: none;
+}
+
+.indented-link {
+    fill: none;
+    stroke: #ccc;
+    stroke-width: 1px;
+    /* Removed dasharray to match CodePen's exact solid lines */
+}
+
+/* Row highlight styling */
+.indented-rect {
+    fill: transparent;
+    transition: fill 0.2s ease;
+}
+
+.indented-rect:hover {
+    fill: rgba(70, 130, 180, 0.08);
+    /* Match steelblue with transparency */
+}
+
+/* Support for hierarchy colors if needed elsewhere */
+.indented-text.folder {
+    font-weight: 600;
+}
